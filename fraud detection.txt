@@ -1,0 +1,136 @@
+# ===============================
+# FRAUD DETECTION PROJECT - COLAB
+# ===============================
+
+# 1️⃣ IMPORT LIBRARIES
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import (
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+    confusion_matrix,
+    classification_report,
+    roc_curve,
+    roc_auc_score
+)
+import joblib
+
+print("Libraries Loaded ✅")
+
+# 2️⃣ LOAD DATASET
+# Upload your CSV in Colab
+from google.colab import files
+uploaded = files.upload()
+
+# Assuming you upload 'malicious_transaction_dataset_1GB.csv'
+filename = list(uploaded.keys())[0]
+df = pd.read_csv(filename, low_memory=True)
+print("Dataset Loaded ✅")
+print("Original shape:", df.shape)
+
+# 3️⃣ CLEAN DATA
+df = df.drop_duplicates()  # remove duplicates
+df = df.dropna()           # remove missing values
+
+# Take 3 lakh rows randomly
+if df.shape[0] > 300000:
+    df = df.sample(n=300000, random_state=42)
+
+print("Data cleaned and sampled:", df.shape)
+
+# 4️⃣ IDENTIFY TARGET COLUMN
+# Replace with your real target column name if different
+possible_targets = ["is_malicious", "is_fraud", "fraud_flag", "label", "Class"]
+target_col = None
+for col in possible_targets:
+    if col in df.columns:
+        target_col = col
+        break
+if target_col is None:
+    raise ValueError("No target column found!")
+
+X = df.drop(target_col, axis=1)
+y = df[target_col]
+
+print("Features and target prepared ✅")
+
+# 5️⃣ SPLIT TRAIN & TEST
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42
+)
+print("Train-Test Split Done ✅")
+
+# 6️⃣ ENCODE CATEGORICAL COLUMNS SAFELY
+categorical_cols = X.select_dtypes(include=["object"]).columns
+preprocessor = ColumnTransformer(
+    [("cat", OneHotEncoder(handle_unknown="ignore", sparse=False), categorical_cols)],
+    remainder="passthrough"
+)
+
+# 7️⃣ RANDOM FOREST CLASSIFIER
+model = RandomForestClassifier(
+    n_estimators=200,  # more trees for higher accuracy
+    max_depth=None,
+    class_weight='balanced',
+    random_state=42,
+    n_jobs=-1
+)
+
+# Pipeline
+pipeline = Pipeline([
+    ("preprocessor", preprocessor),
+    ("classifier", model)
+])
+
+# 8️⃣ TRAIN MODEL
+pipeline.fit(X_train, y_train)
+print("Model Trained ✅")
+
+# 9️⃣ PREDICTION
+y_pred = pipeline.predict(X_test)
+y_prob = pipeline.predict_proba(X_test)[:, 1]
+
+# 1️⃣0️⃣ EVALUATION
+print("\n=== MODEL PERFORMANCE ===")
+print("Accuracy:", accuracy_score(y_test, y_pred))
+print("Precision:", precision_score(y_test, y_pred))
+print("Recall:", recall_score(y_test, y_pred))
+print("F1 Score:", f1_score(y_test, y_pred))
+print("\nClassification Report:\n", classification_report(y_test, y_pred))
+
+# Confusion Matrix
+cm = confusion_matrix(y_test, y_pred)
+plt.figure(figsize=(6,5))
+sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
+plt.title("Confusion Matrix")
+plt.xlabel("Predicted")
+plt.ylabel("Actual")
+plt.show()
+
+# ROC Curve
+fpr, tpr, thresholds = roc_curve(y_test, y_prob)
+roc_auc = roc_auc_score(y_test, y_prob)
+
+plt.figure(figsize=(6,5))
+plt.plot(fpr, tpr, label=f"AUC = {roc_auc:.4f}")
+plt.plot([0,1], [0,1], linestyle='--')
+plt.title("ROC Curve")
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate")
+plt.legend()
+plt.show()
+
+print("ROC AUC Score:", roc_auc)
+
+# 1️⃣1️⃣ SAVE MODEL
+joblib.dump(pipeline, "fraud_model.pkl")
+print("Model Saved as fraud_model.pkl ✅")
